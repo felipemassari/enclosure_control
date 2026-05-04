@@ -1,0 +1,1 @@
+This is a project for a 3D printer enclosure using Python code to control internal temperature and humidity, check if the door is open or closed, turn on LED lighting, and activate a 120mm cooler when the temperature exceeds the limit. Everything is connected to a Raspberry Pi that sends data via MQTT to Home Assistant.
