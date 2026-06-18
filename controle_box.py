@@ -46,9 +46,11 @@ comando_HA_led = False
 last_temp_box = None
 last_temp_eletronica = None
 last_umid_box = None
+last_porta_state = None
+last_time_led = 0.0
 last_sensor_read = 0.0
 last_mqtt_send = 0.0
-last_porta_state = None
+etapa_led = 0
 
 def get_cpu_temp():
     try:
@@ -57,11 +59,15 @@ def get_cpu_temp():
     except: return None
 
 def send_discovery():
-    sensors = [
-        ("temp_box", "Temp Box", "°C"), ("umid_box", "Umidade Box", "%"),
-        ("temp_eletronica", "Temp Eletronica", "°C"), ("temp_cpu", "Temp CPU", "°C"),
-        ("porta", "Status Porta", " "), ("cpu", "Uso CPU", "%"),
-        ("ram_percent", "Porcentagem RAM", "%"), ("ram_used", "RAM Usada", "MB"),
+    sensors = [        
+        ("umid_box", "Umidade Box", "%"),
+        ("temp_box", "Temp Box", "°C"),
+        ("temp_eletronica", "Temp Eletronica", "°C"),
+        ("porta", "Status Porta", " "),
+        ("temp_cpu", "Temp CPU", "°C"),        
+        ("cpu", "Uso CPU", "%"),
+        ("ram_percent", "Porcentagem RAM", "%"),
+        ("ram_used", "RAM Usada", "MB"),
         ("ram_total", "RAM Total", "MB")
     ]
 
@@ -128,12 +134,45 @@ if USE_MQTT:
     except Exception as e: print(f"Erro MQTT: {e}")
 
 # ========================
+# PISCA LED PARA INDICAR COMUNICACAO
+# ========================
+def heartbeat_led(etapa, last_time, agora):
+
+    if etapa == 0 and agora - last_time > 0:
+        GPIO.output(PIN_LED_DATA, True)
+        last_time = agora
+        etapa = 1
+
+    elif etapa == 1 and agora - last_time > 2:
+        GPIO.output(PIN_LED_DATA, False)
+        last_time = agora
+        etapa = 2
+
+    elif etapa == 2 and agora - last_time > 1:
+        GPIO.output(PIN_LED_DATA, True)
+        last_time = agora
+        etapa = 3
+
+    elif etapa == 3 and agora - last_time > 2:
+        GPIO.output(PIN_LED_DATA, False)
+        last_time = agora
+        etapa = 4
+
+    elif etapa == 4 and agora - last_time > 10:
+        etapa = 0
+        last_time = agora
+
+    return etapa, last_time
+
+# ========================
 # LOOP PRINCIPAL
 # ========================
 try:
     while True:
+        print("Loop principal iniciado...", flush=True)
         agora = time.time()
         forçar_envio = False
+        etapa_led, last_time_led = heartbeat_led(etapa_led, last_time_led, agora)
 
         # 1. LEITURA SENSOR PORTA (Instantânea)
         porta_aberta = GPIO.input(PIN_SENSOR_PORTA) == 0
@@ -170,10 +209,16 @@ try:
             last_mqtt_send = agora
             try:
                 payload = {
-                    "temp_box": last_temp_box, "umid_box": last_umid_box, 
-                    "temp_eletronica": last_temp_eletronica, "temp_cpu": get_cpu_temp(),
+                    "temp_box": last_temp_box,
+                    "umid_box": last_umid_box, 
+                    "temp_eletronica": last_temp_eletronica,                    
                     "cooler_box": cooler_box_on,
-                    "porta": "Aberta" if porta_aberta else "Fechada"
+                    "porta": "Aberta" if porta_aberta else "Fechada",
+                    "temp_cpu": get_cpu_temp(),
+                    "cpu": cpu_usage,
+                    "ram_percent": mem.percent,
+                    "ram_used": round(mem.used / (1024 * 1024), 2),
+                    "ram_total": round(mem.total / (1024 * 1024), 2)
                 }
 
                 client.publish(MQTT_TOPIC, json.dumps(payload), qos=1)
