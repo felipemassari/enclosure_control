@@ -35,6 +35,9 @@ GPIO.setup(PIN_SENSOR_PORTA, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 # ========================
 dht_eletronica = adafruit_dht.DHT11(board.D4)
 dht_box = adafruit_dht.DHT11(board.D17)
+cpu_usage = psutil.cpu_percent(interval=None)
+mem = psutil.virtual_memory()
+temp_cpu = get_cpu_temp()
 
 # ========================
 # VAR
@@ -52,6 +55,7 @@ last_sensor_read = 0.0
 last_mqtt_send = 0.0
 etapa_led = 0
 
+
 def get_cpu_temp():
     try:
         res = os.popen('vcgencmd measure_temp').readline()
@@ -59,12 +63,12 @@ def get_cpu_temp():
     except: return None
 
 def send_discovery():
-    sensors = [        
+    sensors = [
+        ("temp_box", "Temp Box", "°C"), 
         ("umid_box", "Umidade Box", "%"),
-        ("temp_box", "Temp Box", "°C"),
         ("temp_eletronica", "Temp Eletronica", "°C"),
+        ("temp_cpu", "Temp CPU", "°C"),
         ("porta", "Status Porta", " "),
-        ("temp_cpu", "Temp CPU", "°C"),        
         ("cpu", "Uso CPU", "%"),
         ("ram_percent", "Porcentagem RAM", "%"),
         ("ram_used", "RAM Usada", "MB"),
@@ -168,8 +172,7 @@ def heartbeat_led(etapa, last_time, agora):
 # LOOP PRINCIPAL
 # ========================
 try:
-    while True:
-        print("Loop principal iniciado...", flush=True)
+    while True:        
         agora = time.time()
         forçar_envio = False
         etapa_led, last_time_led = heartbeat_led(etapa_led, last_time_led, agora)
@@ -179,8 +182,7 @@ try:
         if porta_aberta != last_porta_state:
             last_porta_state = porta_aberta
             forçar_envio = True
-            print(f"DEBUG: Mudança de porta para {porta_aberta}")
-        
+            
         GPIO.output(PIN_LED_FITA, True if porta_aberta else comando_HA_led)
 
         # 2. LEITURA SENSORES (A cada 10s)
@@ -190,6 +192,9 @@ try:
                 last_temp_box = dht_box.temperature
                 last_umid_box = dht_box.humidity
                 last_temp_eletronica = dht_eletronica.temperature
+                cpu_usage = psutil.cpu_percent(interval=None)
+                mem = psutil.virtual_memory()
+                temp_cpu = get_cpu_temp()
             except: pass
 
         # 3. LÓGICA COOLER ELETRÔNICA (Digital / Liga-Desliga)
@@ -214,13 +219,13 @@ try:
                     "temp_eletronica": last_temp_eletronica,                    
                     "cooler_box": cooler_box_on,
                     "porta": "Aberta" if porta_aberta else "Fechada",
-                    "temp_cpu": get_cpu_temp(),
+                    "temp_cpu": temp_cpu,
                     "cpu": cpu_usage,
                     "ram_percent": mem.percent,
                     "ram_used": round(mem.used / (1024 * 1024), 2),
                     "ram_total": round(mem.total / (1024 * 1024), 2)
+                    
                 }
-
                 client.publish(MQTT_TOPIC, json.dumps(payload), qos=1)
 
                 client.publish(
@@ -229,7 +234,7 @@ try:
                     retain=True
                     )
             except: pass
-
+        print(f"DEBUG: CPU: {cpu_usage}% | RAM: {mem.percent}%", flush=True)
         time.sleep(0.5)
 except KeyboardInterrupt:
     print("Encerrando...")
