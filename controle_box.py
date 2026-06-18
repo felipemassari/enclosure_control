@@ -37,7 +37,6 @@ dht_eletronica = adafruit_dht.DHT11(board.D4)
 dht_box = adafruit_dht.DHT11(board.D17)
 cpu_usage = psutil.cpu_percent(interval=None)
 mem = psutil.virtual_memory()
-temp_cpu = get_cpu_temp()
 
 # ========================
 # VAR
@@ -61,6 +60,7 @@ def get_cpu_temp():
         res = os.popen('vcgencmd measure_temp').readline()
         return float(res.replace("temp=","").replace("'C\n",""))
     except: return None
+temp_cpu = get_cpu_temp()
 
 def send_discovery():
     sensors = [
